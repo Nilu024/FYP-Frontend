@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Bricolage+Grotesque:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 36 33% 97%;
+    --foreground: 20 20% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 20% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 20% 10%;
+    --primary: 25 95% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 36 30% 94%;
+    --secondary-foreground: 20 20% 20%;
+    --muted: 36 25% 94%;
+    --muted-foreground: 25 10% 50%;
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 20% 88%;
+    --input: 30 20% 88%;
+    --ring: 25 95% 53%;
+    --radius: 1rem;
+  }
+  .dark {
+    --background: 20 14% 8%;
+    --foreground: 36 20% 95%;
+    --card: 20 12% 11%;
+    --card-foreground: 36 20% 95%;
+    --popover: 20 12% 11%;
+    --popover-foreground: 36 20% 95%;
+    --primary: 25 95% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 20 10% 16%;
+    --secondary-foreground: 36 20% 90%;
+    --muted: 20 10% 16%;
+    --muted-foreground: 30 10% 55%;
+    --accent: 160 70% 42%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 20 8% 20%;
+    --input: 20 8% 20%;
+    --ring: 25 95% 58%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { scroll-behavior: smooth; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  }
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 9999px; }
+
+.card-hover { transition: all 0.25s ease; }
+.card-hover:hover { transform: translateY(-3px); box-shadow: 0 12px 40px -8px rgba(249,115,22,0.15); }
+
+.urgency-pulse { animation: upulse 2.5s ease-in-out infinite; }
+@keyframes upulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+}
+
+.progress-bar-fill {
+  background: linear-gradient(90deg, #f97316, #10b981);
+  height: 100%;
+  border-radius: 9999px;
+  position: relative;
+  overflow: hidden;
+}
+.progress-bar-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 2s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.page-in { animation: pagein 0.35s ease-out both; }
+@keyframes pagein {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, hsl(var(--muted)) 0%, hsl(var(--secondary)) 50%, hsl(var(--muted)) 100%);
+  background-size: 200% 100%;
+  animation: skel 1.6s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+@keyframes skel {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+input:focus, textarea:focus, select:focus, button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.25), 0 0 0 1px hsl(var(--primary) / 0.5);
+}
