@@ -28,12 +28,36 @@ export default function RegisterPage() {
     }
   };
 
-  const handleGeoLocate = () => {
-    navigator.geolocation?.getCurrentPosition(
-      () => toast.success("Location detected! Update city/state in your profile."),
-      () => toast.error("Could not access location")
-    );
-  };
+const handleGeoLocate = async () => {
+  if (!navigator.geolocation) {
+    toast.error("Geolocation not supported");
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      const { latitude: lat, longitude: lng } = position.coords;
+      
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`);
+        const data = await response.json();
+        
+        const address = data.address || {};
+        const city = address.city || address.town || address.village || address.county || "";
+        const state = address.state || address.region || "";
+        
+        setForm(prev => ({ ...prev, city, state }));
+        toast.success(`Location filled: ${city || "Unknown"}, ${state || "Unknown"}`);
+      } catch (err) {
+        toast.error("Could not fetch location details");
+      }
+    },
+    (error) => {
+      console.error("Geolocation error:", error);
+      toast.error("Could not access location");
+    }
+  );
+};
 
   return (
     <div>
