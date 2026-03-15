@@ -66,8 +66,8 @@ export default function LoginPage() {
         <div className="space-y-1.5 text-xs text-muted-foreground">
           {[
             { role: "Admin", emoji: "🔑", email: "admin@aadhar.org", pass: "Admin@123" },
-            { role: "Donor", emoji: "❤️", email: "donor@test.com", pass: "donor123" },
-            { role: "Charity", emoji: "🏛", email: "charity@test.com", pass: "charity123" },
+            // { role: "Donor", emoji: "❤️", email: "donor@test.com", pass: "donor123" },
+            // { role: "Charity", emoji: "🏛", email: "charity@test.com", pass: "charity123" },
           ].map(({ role, emoji, email, pass }) => (
             <button key={role} type="button"
               onClick={() => setForm({ email, password: pass })}

@@ -43,12 +43,12 @@ export default function Footer() {
 
         <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
           <p>© 2024 AADHAR Charity Platform. Built with ❤️ for India.</p>
-          <p className="flex items-center gap-1.5">
+          {/* <p className="flex items-center gap-1.5">
             <span className="font-medium text-foreground">MERN</span> ·
             <span className="font-medium text-foreground">KNN</span> ·
             <span className="font-medium text-foreground">React</span> ·
             <span className="font-medium text-saffron-500">Tailwind</span>
-          </p>
+          </p> */}
         </div>
       </div>
     </footer>
