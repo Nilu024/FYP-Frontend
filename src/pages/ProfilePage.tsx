@@ -58,6 +58,37 @@ export default function ProfilePage() {
     }
   };
 
+  const handleGeoLocate = async () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation not supported");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude: lat, longitude: lng } = position.coords;
+        
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`);
+          const data = await response.json();
+          
+          const address = data.address || {};
+          const city = address.city || address.town || address.village || address.county || "";
+          const state = address.state || address.region || "";
+          
+          setForm(prev => ({ ...prev, city, state }));
+          toast.success(`Location filled: ${city || "Unknown"}, ${state || "Unknown"}`);
+        } catch (err) {
+          toast.error("Could not fetch location details");
+        }
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        toast.error("Could not access location");
+      }
+    );
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <h1 className="font-display font-bold text-3xl text-foreground mb-8">Profile Settings</h1>
@@ -88,9 +119,14 @@ export default function ProfilePage() {
 
         {/* Location */}
         <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-          <h2 className="font-semibold text-foreground flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-saffron-500" /> Location
-          </h2>
+          <div className="flex justify-between mb-1.5">
+            <h2 className="font-semibold text-foreground flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-saffron-500" /> Location
+            </h2>
+            <button type="button" onClick={handleGeoLocate} className="flex items-center gap-1 text-xs text-saffron-600 hover:underline font-medium">
+              <MapPin className="w-3 h-3" /> Auto-detect
+            </button>
+          </div>
           <p className="text-xs text-muted-foreground">Used by KNN to show nearby causes</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -106,6 +142,7 @@ export default function ProfilePage() {
                 className="w-full px-4 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-saffron-400 focus:border-transparent" />
             </div>
           </div>
+
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
               Max Distance for Recommendations: <span className="text-saffron-600">{form.maxDistanceKm}km</span>
