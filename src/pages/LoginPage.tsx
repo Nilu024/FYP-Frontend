@@ -65,7 +65,7 @@ export default function LoginPage() {
         <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Demo accounts</p>
         <div className="space-y-1.5 text-xs text-muted-foreground">
           {[
-            { role: "Admin", emoji: "🔑", email: "admin@aadhar.org", pass: "admin123" },
+            { role: "Admin", emoji: "🔑", email: "admin@aadhar.org", pass: "Admin@123" },
             { role: "Donor", emoji: "❤️", email: "donor@test.com", pass: "donor123" },
             { role: "Charity", emoji: "🏛", email: "charity@test.com", pass: "charity123" },
           ].map(({ role, emoji, email, pass }) => (
