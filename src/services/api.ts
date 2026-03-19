@@ -2,35 +2,49 @@ import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
+const getStoredToken = () => {
+  const token = localStorage.getItem("aadhar_token");
+  if (!token || token === "undefined" || token === "null") return null;
+  return token;
+};
+
 const api = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });
 
-// Attach token to every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("aadhar_token");
+  const token = getStoredToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Handle 401 globally
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const url = err.config?.url || "";
+
+    const skipRedirect =
+      url.includes("/auth/login") ||
+      url.includes("/auth/register") ||
+      url.includes("/auth/verify-email") ||
+      url.includes("/auth/resend-verification");
+
+    if (err.response?.status === 401 && !skipRedirect) {
       localStorage.removeItem("aadhar_token");
       localStorage.removeItem("aadhar_user");
-      window.location.href = "/login";
+      window.location.hash = "#/login";
     }
+
     return Promise.reject(err);
   }
 );
 
-// ── AUTH ──────────────────────────────────────────
 export const authAPI = {
   register: (data: any) => api.post("/auth/register", data),
+  verifyEmail: (data: { email: string; otp: string }) => api.post("/auth/verify-email", data),
+  resendVerification: (data: { email: string }) => api.post("/auth/resend-verification", data),
   login: (data: any) => api.post("/auth/login", data),
   logout: () => api.post("/auth/logout"),
   getMe: () => api.get("/auth/me"),
@@ -38,7 +52,6 @@ export const authAPI = {
   updatePassword: (data: any) => api.put("/auth/password", data),
 };
 
-// ── CHARITIES ──────────────────────────────────────
 export const charityAPI = {
   getAll: (params?: any) => api.get("/charities", { params }),
   getOne: (id: string) => api.get(`/charities/${id}`),
@@ -49,7 +62,6 @@ export const charityAPI = {
   verify: (id: string, data: any) => api.patch(`/charities/${id}/verify`, data),
 };
 
-// ── NEEDS ──────────────────────────────────────────
 export const needsAPI = {
   getAll: (params?: any) => api.get("/needs", { params }),
   getOne: (id: string) => api.get(`/needs/${id}`),
@@ -59,14 +71,12 @@ export const needsAPI = {
   updateStatus: (id: string, data: any) => api.patch(`/needs/${id}/status`, data),
 };
 
-// ── DONATIONS ─────────────────────────────────────
 export const donationsAPI = {
   create: (data: any) => api.post("/donations", data),
   getMyDonations: (params?: any) => api.get("/donations/my", { params }),
   getOne: (id: string) => api.get(`/donations/${id}`),
 };
 
-// ── RECOMMENDATIONS ───────────────────────────────
 export const recommendAPI = {
   getRecommendations: (params?: any) => api.get("/recommendations", { params }),
   getNearby: (params?: any) => api.get("/recommendations/nearby", { params }),
@@ -74,7 +84,6 @@ export const recommendAPI = {
   trackInteraction: (data: any) => api.post("/recommendations/track", data),
 };
 
-// ── NOTIFICATIONS ─────────────────────────────────
 export const notificationsAPI = {
   getVapidKey: () => api.get("/notifications/vapid-key"),
   subscribe: (subscription: any) => api.post("/notifications/subscribe", { subscription }),
@@ -84,7 +93,6 @@ export const notificationsAPI = {
   delete: (id: string) => api.delete(`/notifications/${id}`),
 };
 
-// ── ADMIN ─────────────────────────────────────────
 export const adminAPI = {
   getDashboard: () => api.get("/admin/dashboard"),
   getPendingCharities: () => api.get("/admin/charities/pending"),
