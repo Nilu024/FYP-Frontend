@@ -96,7 +96,17 @@ export default function DonationPage() {
       
     } catch (err: any) {
       console.error("Payment error:", err);
-      const errorMessage = err.error?.description || err.message || "Payment failed. Please try again.";
+      let errorMessage = "Payment failed. Please try again.";
+      
+      // Check for specific error messages
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.error?.description) {
+        errorMessage = err.error.description;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
       setFailure(true);
       setFailureReason(errorMessage);
       toast.error(errorMessage);
