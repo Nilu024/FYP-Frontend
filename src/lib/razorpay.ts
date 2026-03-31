@@ -18,18 +18,26 @@ export const loadRazorpay = () => {
 
 export const openRazorpayCheckout = (options: any) => {
   return new Promise((resolve, reject) => {
-    const rzp = new (window as any).Razorpay(options);
-    
-    rzp.on("payment.success", (response: any) => {
-      resolve(response);
-      rzp.close();
-    });
-    
-    rzp.on("payment.failed", (response: any) => {
-      reject(response);
-      rzp.close();
-    });
-    
-    rzp.open();
+    try {
+      if (!options.key) {
+        throw new Error("No key passed - Payment gateway not configured");
+      }
+      
+      const rzp = new (window as any).Razorpay(options);
+      
+      rzp.on("payment.success", (response: any) => {
+        resolve(response);
+        rzp.close();
+      });
+      
+      rzp.on("payment.failed", (response: any) => {
+        reject(response);
+        rzp.close();
+      });
+      
+      rzp.open();
+    } catch (err: any) {
+      reject(new Error(err.message || "Failed to open payment gateway"));
+    }
   });
 };

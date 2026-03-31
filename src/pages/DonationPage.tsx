@@ -70,6 +70,17 @@ export default function DonationPage() {
       });
       
       const { data } = createRes.data;
+      
+      // Validate Razorpay key is present
+      if (!data.key) {
+        const errorMsg = "Payment gateway not configured. Please contact support.";
+        setFailure(true);
+        setFailureReason(errorMsg);
+        toast.error(errorMsg);
+        setSubmitting(false);
+        return;
+      }
+      
       setDonationId(data.id as string);
       
       // Step 2: Load Razorpay
