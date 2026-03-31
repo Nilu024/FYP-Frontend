@@ -5,7 +5,7 @@ import { useAuthStore } from "../store/authStore";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
-  const { login, isLoading } = useAuthStore();
+const { login, isLoading } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || "/dashboard";

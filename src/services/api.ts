@@ -2,10 +2,24 @@ import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-const getStoredToken = () => {
-  const token = localStorage.getItem("aadhar_token");
-  if (!token || token === "undefined" || token === "null") return null;
-  return token;
+import { auth } from '../lib/firebase';
+
+const getStoredToken = async () => {
+  // Try stored JWT first (backend token)
+  const stored = localStorage.getItem("aadhar_token");
+  if (stored && stored !== "undefined" && stored !== "null") return stored;
+  
+  // Fallback to Firebase ID token if available
+  try {
+    if (auth.currentUser) {
+      const fbToken = await auth.currentUser.getIdToken();
+      if (fbToken) return fbToken;
+    }
+  } catch (err) {
+    console.debug('Firebase token unavailable:', err);
+  }
+  
+  return null;
 };
 
 const api = axios.create({
@@ -14,8 +28,8 @@ const api = axios.create({
   withCredentials: true,
 });
 
-api.interceptors.request.use((config) => {
-  const token = getStoredToken();
+api.interceptors.request.use(async (config) => {
+  const token = await getStoredToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });

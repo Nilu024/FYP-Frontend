@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { authAPI } from "../services/api";
+import api, { authAPI } from "../services/api";
+import { signInWithEmailAndPassword, signOut, UserCredential } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 interface User {
   _id: string;
@@ -23,6 +25,8 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  firebaseLogin: (email: string, password: string) => Promise<void>;
+  legacyLogin: (email: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (data: any) => Promise<RegisterResponse>;
   verifyEmail: (email: string, otp: string) => Promise<User>;
@@ -53,7 +57,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isAuthenticated: !!getStoredToken(),
 
-  login: async (email, password) => {
+  firebaseLogin: async (email: string, password: string) => {
+    set({ isLoading: true });
+    try {
+      const result: UserCredential = await signInWithEmailAndPassword(auth, email, password);
+      const idToken = await result.user.getIdToken();
+      const { data } = await api.post('/auth/verify-token', { idToken });
+      localStorage.setItem("aadhar_token", data.token);
+      localStorage.setItem("aadhar_user", JSON.stringify(data.user));
+      set({ user: data.user, token: data.token, isAuthenticated: true, isLoading: false });
+    } catch (err) {
+      set({ isLoading: false });
+      throw err;
+    }
+  },
+
+  legacyLogin: async (email: string, password: string) => {
     set({ isLoading: true });
     try {
       const { data } = await authAPI.login({ email, password });
@@ -63,6 +82,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (err) {
       set({ isLoading: false });
       throw err;
+    }
+  },
+
+  login: async (email: string, password: string) => {
+    try {
+      await get().firebaseLogin(email, password);
+    } catch (err: any) {
+      // If Firebase is not configured properly or user is not found there, fallback to backend auth
+      console.warn('Firebase login failed, falling back to backend:', err.code || err.message || err);
+      await get().legacyLogin(email, password);
     }
   },
 
@@ -99,7 +128,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  logout: () => {
+  logout: async () => {
+    try {
+      await signOut(auth);
+    } catch {}
     authAPI.logout().catch(() => {});
     localStorage.removeItem("aadhar_token");
     localStorage.removeItem("aadhar_user");
