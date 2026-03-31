@@ -89,6 +89,7 @@ export const donationsAPI = {
   create: (data: any) => api.post("/donations", data),
   getMyDonations: (params?: any) => api.get("/donations/my", { params }),
   getOne: (id: string) => api.get(`/donations/${id}`),
+  verify: (data: any) => api.post("/donations/verify", data),
 };
 
 export const recommendAPI = {

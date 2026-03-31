@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CreditCard, Smartphone, Building, Wallet, CheckCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, CreditCard, Smartphone, Building, Wallet, CheckCircle, Loader2, XCircle, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { needsAPI, donationsAPI, recommendAPI } from "../services/api";
+import { loadRazorpay, openRazorpayCheckout } from "../lib/razorpay";
 import { formatCurrency, getCategoryIcon } from "../lib/utils";
 import toast from "react-hot-toast";
 
@@ -21,7 +22,11 @@ export default function DonationPage() {
   const [need, setNeed] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [failure, setFailure] = useState(false);
+  const [failureReason, setFailureReason] = useState("");
+  const [donationId, setDonationId] = useState("");
   const defaultAmt = parseInt(searchParams.get("amount") || "500");
   const [selectedAmt, setSelectedAmt] = useState(AMOUNTS.includes(defaultAmt) ? defaultAmt : 500);
   const [customAmt, setCustomAmt] = useState(AMOUNTS.includes(defaultAmt) ? "" : String(defaultAmt));
@@ -36,25 +41,109 @@ export default function DonationPage() {
   }, [needId]);
 
   const finalAmt = customAmt ? parseInt(customAmt) || 0 : selectedAmt;
+  
+  const resetForm = () => {
+    setFailure(false);
+    setFailureReason("");
+    setSuccess(false);
+    setVerifying(false);
+    setDonationId("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (finalAmt < 10) return toast.error("Minimum donation is ₹10");
+    
     setSubmitting(true);
+    setFailure(false);
+    setFailureReason("");
+    
     try {
-      await donationsAPI.create({
-        need: needId, charity: need.charity?._id,
-        amount: finalAmt, paymentMethod: payMethod, message, isAnonymous: anonymous,
-        status: "completed", transactionId: `TXN-${Date.now()}`,
+      // Step 1: Create pending donation & Razorpay order
+      const createRes = await donationsAPI.create({
+        need: needId, 
+        charity: need.charity?._id,
+        amount: finalAmt, 
+        paymentMethod: payMethod, 
+        message, 
+        isAnonymous: anonymous,
       });
-      await recommendAPI.trackInteraction({ category: need.category, charityId: need.charity?._id, action: "donate" }).catch(() => {});
-      setSuccess(true);
+      
+      const { data } = createRes.data;
+      setDonationId(data.id as string);
+      
+      // Step 2: Load Razorpay
+      await loadRazorpay();
+      
+      // Step 3: Open checkout
+      const razorpayResponse = await openRazorpayCheckout(data);
+
+      // Step 4: Verify payment with backend
+      setVerifying(true);
+      await handlePaymentSuccess(razorpayResponse);
+      toast.success("Payment successful and verified! Thank you.");
+      
     } catch (err: any) {
-      toast.error(err.response?.data?.error || "Donation failed. Please try again.");
-    } finally { setSubmitting(false); }
+      console.error("Payment error:", err);
+      const errorMessage = err.error?.description || err.message || "Payment failed. Please try again.";
+      setFailure(true);
+      setFailureReason(errorMessage);
+      toast.error(errorMessage);
+    } finally { 
+      setSubmitting(false); 
+    }
   };
 
+  // Payment success handler (called from Razorpay callback)
+  const handlePaymentSuccess = async (razorpayResponse: any) => {
+    if (!donationId) return;
+    
+    try {
+      await donationsAPI.verify({
+        razorpay_order_id: razorpayResponse.razorpay_order_id,
+        razorpay_payment_id: razorpayResponse.razorpay_payment_id,
+        razorpay_signature: razorpayResponse.razorpay_signature,
+        donationId,
+      });
+      
+      await recommendAPI.trackInteraction({ 
+        category: need?.category, 
+        charityId: need?.charity?._id, 
+        action: "donate" 
+      }).catch(() => {});
+      
+      setSuccess(true);
+      toast.success("Thank you! Your donation is confirmed.");
+    } catch (err: any) {
+      const errorMessage = err.error?.description || err.message || "Verification failed. Please contact support.";
+      setFailure(true);
+      setFailureReason(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+
   if (loading) return <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-2 border-saffron-500 border-t-transparent rounded-full animate-spin" /></div>;
+
+  if (verifying) return (
+    <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
+      <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 180 }}>
+        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+        </div>
+      </motion.div>
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+        <h2 className="font-display font-extrabold text-3xl text-foreground mb-2">Verifying Payment</h2>
+        <p className="text-muted-foreground mb-1">Please wait while we confirm your</p>
+        <p className="font-display font-bold text-3xl text-saffron-600 mb-2">{formatCurrency(finalAmt)}</p>
+        <p className="text-muted-foreground text-sm mb-1">donation to</p>
+        <p className="font-semibold text-foreground mb-6">"{need?.title}"</p>
+        <p className="text-sm text-muted-foreground">This may take a few seconds...</p>
+      </motion.div>
+    </div>
+  );
 
   if (success) return (
     <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
@@ -73,6 +162,35 @@ export default function DonationPage() {
         <div className="flex flex-col gap-3 mt-8">
           <Link to="/dashboard" className="py-3 bg-saffron-500 hover:bg-saffron-600 text-white font-bold rounded-xl transition-colors shadow-btn-primary">Go to Dashboard</Link>
           <Link to="/needs" className="py-3 border border-border text-foreground font-semibold rounded-xl hover:bg-secondary transition-colors">Explore More Causes</Link>
+        </div>
+      </motion.div>
+    </div>
+  );
+
+  if (failure) return (
+    <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
+      <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 180 }}>
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <XCircle className="w-10 h-10 text-red-500" />
+        </div>
+      </motion.div>
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+        <h2 className="font-display font-extrabold text-3xl text-foreground mb-2">Payment Failed</h2>
+        <p className="text-muted-foreground mb-1">Your donation of</p>
+        <p className="font-display font-bold text-3xl text-red-600 mb-2">{formatCurrency(finalAmt)}</p>
+        <p className="text-muted-foreground text-sm mb-1">to</p>
+        <p className="font-semibold text-foreground mb-6">"{need?.title}"</p>
+        <p className="text-sm text-muted-foreground mb-2">Reason: {failureReason}</p>
+        <p className="text-sm text-muted-foreground mb-6">Don't worry, no charges were made to your account.</p>
+        <div className="flex flex-col gap-3 mt-8">
+          <button 
+            onClick={resetForm}
+            className="py-3 bg-saffron-500 hover:bg-saffron-600 text-white font-bold rounded-xl transition-colors shadow-btn-primary flex items-center justify-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Try Again
+          </button>
+          <Link to="/needs" className="py-3 border border-border text-foreground font-semibold rounded-xl hover:bg-secondary transition-colors">Explore Other Causes</Link>
         </div>
       </motion.div>
     </div>
@@ -148,9 +266,9 @@ export default function DonationPage() {
             <span className="text-sm text-muted-foreground">Donate anonymously</span>
           </label>
 
-          <button type="submit" disabled={submitting || finalAmt < 10}
+          <button type="submit" disabled={submitting || verifying || finalAmt < 10}
             className="w-full py-4 bg-saffron-500 hover:bg-saffron-600 disabled:opacity-60 text-white font-bold rounded-xl text-base transition-all shadow-btn-primary hover:shadow-none flex items-center justify-center gap-2">
-            {submitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing…</> : `Donate ${formatCurrency(finalAmt)}`}
+            {verifying ? <><Loader2 className="w-5 h-5 animate-spin" /> Verifying Payment…</> : submitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing…</> : `Donate ${formatCurrency(finalAmt)}`}
           </button>
           <p className="text-xs text-center text-muted-foreground">🔒 Secure payment · Receipt sent to email · 80G eligible</p>
         </form>
