@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { authAPI } from "../services/api";
-import { MapPin, Save, Loader2, Bell, BellOff } from "lucide-react";
+import { MapPin, Save, Loader2, Bell, BellOff, Mail, AlertCircle } from "lucide-react";
 import { getCategoryIcon } from "../lib/utils";
 import toast from "react-hot-toast";
 import { registerPushNotifications, unregisterPushNotifications } from "../services/pushNotifications";
@@ -9,6 +10,7 @@ import { registerPushNotifications, unregisterPushNotifications } from "../servi
 const CATEGORIES = ["Education","Healthcare","Poverty","Environment","Animal Welfare","Disaster Relief","Women Empowerment","Child Welfare","Elderly Care","Disability Support","Water & Sanitation","Food Security"];
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
   const { user, updateUser } = useAuthStore();
   const [form, setForm] = useState({
     name: user?.name || "",
@@ -116,6 +118,29 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* Email Verification Alert */}
+        {user && !user.emailVerified && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6 flex items-start gap-4">
+            <div className="flex-shrink-0 pt-0.5">
+              <AlertCircle className="w-5 h-5 text-yellow-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-yellow-900 dark:text-yellow-300 mb-1">Email Verification Required</h3>
+              <p className="text-sm text-yellow-800 dark:text-yellow-400 mb-3">
+                Please verify your email address to unlock all features and ensure you receive important notifications.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/verify-email', { state: { email: user.email, isFromLogin: true } })}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg transition-colors"
+              >
+                <Mail className="w-4 h-4" />
+                Verify Email Now
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Location */}
         <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
