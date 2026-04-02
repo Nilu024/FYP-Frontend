@@ -197,7 +197,7 @@ export default function DashboardPage() {
       {/* Email Verification Dialog */}
       <EmailVerificationDialog
         email={unverifiedEmail}
-        isOpen={!!unverifiedEmail && !!user && !user.emailVerified && !dialogDismissed}
+        isOpen={!!unverifiedEmail && !!user && !user.isVerified && !dialogDismissed}
         onClose={handleDialogClose}
       />
     </div>
