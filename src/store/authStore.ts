@@ -12,6 +12,7 @@ interface User {
   location?: any;
   preferences?: any;
   followedCharities?: any[];
+  emailVerified?: boolean;
 }
 
 interface RegisterResponse {
@@ -25,6 +26,7 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  unverifiedEmail?: string;
   firebaseLogin: (email: string, password: string) => Promise<void>;
   legacyLogin: (email: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -34,6 +36,7 @@ interface AuthState {
   logout: () => void;
   updateUser: (data: Partial<User>) => void;
   checkAuth: () => Promise<void>;
+  setUnverifiedEmail: (email: string | undefined) => void;
 }
 
 const getStoredUser = (): User | null => {
@@ -56,6 +59,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: getStoredToken(),
   isLoading: false,
   isAuthenticated: !!getStoredToken(),
+  unverifiedEmail: undefined,
+
+  setUnverifiedEmail: (email: string | undefined) => {
+    set({ unverifiedEmail: email });
+  },
 
   firebaseLogin: async (email: string, password: string) => {
     set({ isLoading: true });
@@ -99,6 +107,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
     try {
       const { data } = await authAPI.register(formData);
+      
+      // Auto-login if backend returns token and user
+      if (data.token && data.user) {
+        localStorage.setItem("aadhar_token", data.token);
+        localStorage.setItem("aadhar_user", JSON.stringify(data.user));
+        set({ 
+          user: data.user, 
+          token: data.token, 
+          isAuthenticated: true, 
+          isLoading: false 
+        });
+      }
+      
       set({ isLoading: false });
       return data;
     } catch (err) {

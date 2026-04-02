@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Heart, MapPin, Sparkles, Bell, ChevronRight, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuthStore } from "../store/authStore";
+import EmailVerificationDialog from "../components/EmailVerificationDialog";
 import RecommendationCarousel from "../components/donor/RecommendationCarousel";
 import { donationsAPI } from "../services/api";
 import { formatCurrency, formatDate, getCategoryIcon } from "../lib/utils";
@@ -10,11 +11,12 @@ import { registerPushNotifications, isPushSubscribed } from "../services/pushNot
 import toast from "react-hot-toast";
 
 export default function DashboardPage() {
-  const { user } = useAuthStore();
+  const { user, unverifiedEmail, setUnverifiedEmail } = useAuthStore();
   const [donations, setDonations] = useState<any[]>([]);
   const [totalGiven, setTotalGiven] = useState(0);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
+  const [dialogDismissed, setDialogDismissed] = useState(false);
 
   useEffect(() => {
     donationsAPI.getMyDonations({ limit: 5 }).then(r => {
@@ -24,6 +26,18 @@ export default function DashboardPage() {
     }).catch(() => {});
     isPushSubscribed().then(setPushEnabled);
   }, []);
+
+  // Show email verification dialog if email is not verified and user hasn't dismissed it
+  useEffect(() => {
+    if (user && !user.emailVerified && !dialogDismissed && !unverifiedEmail) {
+      setUnverifiedEmail(user.email);
+    }
+  }, [user?.emailVerified, user?.email, dialogDismissed, unverifiedEmail, setUnverifiedEmail]);
+
+  const handleDialogClose = () => {
+    setUnverifiedEmail(undefined);
+    setDialogDismissed(true);
+  };
 
   const handleEnablePush = async () => {
     setPushLoading(true);
@@ -179,6 +193,13 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Email Verification Dialog */}
+      <EmailVerificationDialog
+        email={unverifiedEmail}
+        isOpen={!!unverifiedEmail && !!user && !user.emailVerified && !dialogDismissed}
+        onClose={handleDialogClose}
+      />
     </div>
   );
 }

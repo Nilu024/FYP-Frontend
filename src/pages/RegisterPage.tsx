@@ -52,10 +52,17 @@ export default function RegisterPage() {
         },
       });
 
-      toast.success(response.message || "Verification code sent to your email");
-      navigate("/verify-email", {
-        state: { email: form.email },
-      });
+      // Check if auto-login was successful
+      if (response.token && response.user) {
+        if (response.emailSent) {
+          toast.success("Account created! Verification code sent to your email.");
+        } else {
+          toast.success("Account created! Please verify your email.");
+        }
+        
+        // Navigate to dashboard - verification dialog will show there if email not verified
+        navigate("/dashboard", { replace: true });
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Registration failed");
     }

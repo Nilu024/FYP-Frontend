@@ -62,18 +62,21 @@ export default function App() {
           <Route path="needs/:id" element={<NeedDetailPage />} />
           <Route path="charities" element={<CharitiesPage />} />
           <Route path="charities/:id" element={<CharityDetailPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
         </Route>
 
         {/* Auth routes */}
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
         </Route>
 
         {/* Donor protected routes */}
-        <Route element={<ProtectedRoute roles={["donor", "charity", "admin"]} />}>
+        <Route
+          element={<ProtectedRoute roles={["donor", "charity", "admin"]} />}
+        >
           <Route path="/" element={<MainLayout />}>
+            s
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="donate/:needId" element={<DonationPage />} />
             <Route path="profile" element={<ProfilePage />} />

@@ -1,36 +1,54 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
+import EmailVerificationDialog from "../components/EmailVerificationDialog";
 import toast from "react-hot-toast";
 
 export default function LoginPage() {
-const { login, isLoading } = useAuthStore();
+  const { login, user, unverifiedEmail, setUnverifiedEmail, isLoading } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || "/dashboard";
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPass, setShowPass] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+
+  // Show dialog if user logged in but email not verified
+  useEffect(() => {
+    if (user && !user.emailVerified && showEmailDialog) {
+      setUnverifiedEmail(user.email);
+    }
+  }, [user?.emailVerified, showEmailDialog, setUnverifiedEmail, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await login(form.email, form.password);
-      toast.success("Welcome back!");
-      navigate(from, { replace: true });
+      
+      // Check if email is verified after login
+      // Wait a moment for state to update
+      setTimeout(() => {
+        const currentUser = useAuthStore.getState().user;
+        if (currentUser && !currentUser.emailVerified) {
+          setShowEmailDialog(true);
+          setUnverifiedEmail(currentUser.email);
+          toast.success("Welcome! Please verify your email.");
+          return;
+        }
+        
+        toast.success("Welcome back!");
+        navigate(from, { replace: true });
+      }, 100);
     } catch (err: any) {
-      const message = err.response?.data?.error || "Invalid email or password";
-
-      if (message === "Please verify your email first") {
-        toast.error(message);
-        navigate("/verify-email", {
-          state: { email: form.email },
-        });
-        return;
-      }
-
+      const message = err.response?.data?.error || err.message || "Invalid email or password";
       toast.error(message);
     }
+  };
+
+  const handleDialogClose = () => {
+    setUnverifiedEmail(undefined);
+    setShowEmailDialog(false);
   };
 
   return (
@@ -152,6 +170,13 @@ const { login, isLoading } = useAuthStore();
           Create one free
         </Link>
       </p>
+
+      {/* Email Verification Dialog */}
+      <EmailVerificationDialog
+        email={unverifiedEmail}
+        isOpen={!!unverifiedEmail && showEmailDialog}
+        onClose={handleDialogClose}
+      />
     </div>
   );
 }
