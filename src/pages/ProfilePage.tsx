@@ -120,7 +120,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Email Verification Alert */}
-        {user && !user.emailVerified && (
+        {user && !user?.isVerified && (
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-2xl p-6 flex items-start gap-4">
             <div className="flex-shrink-0 pt-0.5">
               <AlertCircle className="w-5 h-5 text-yellow-600" />
