@@ -1,6 +1,21 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CreditCard, Smartphone, Building, Wallet, CheckCircle, Loader2, XCircle, RefreshCw } from "lucide-react";
+import {
+  useParams,
+  useNavigate,
+  Link,
+  useSearchParams,
+} from "react-router-dom";
+import {
+  ArrowLeft,
+  CreditCard,
+  Smartphone,
+  Building,
+  Wallet,
+  CheckCircle,
+  Loader2,
+  XCircle,
+  RefreshCw,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { needsAPI, donationsAPI, recommendAPI } from "../services/api";
 import { loadRazorpay, openRazorpayCheckout } from "../lib/razorpay";
@@ -9,9 +24,24 @@ import toast from "react-hot-toast";
 
 const AMOUNTS = [100, 250, 500, 1000, 2500, 5000];
 const PAYMENT_METHODS = [
-  { value: "upi", label: "UPI", icon: Smartphone, desc: "PhonePe, GPay, Paytm" },
-  { value: "card", label: "Debit / Credit Card", icon: CreditCard, desc: "Visa, Mastercard, RuPay" },
-  { value: "netbanking", label: "Net Banking", icon: Building, desc: "All major banks" },
+  {
+    value: "upi",
+    label: "UPI",
+    icon: Smartphone,
+    desc: "PhonePe, GPay, Paytm",
+  },
+  {
+    value: "card",
+    label: "Debit / Credit Card",
+    icon: CreditCard,
+    desc: "Visa, Mastercard, RuPay",
+  },
+  {
+    value: "netbanking",
+    label: "Net Banking",
+    icon: Building,
+    desc: "All major banks",
+  },
   { value: "wallet", label: "Wallet", icon: Wallet, desc: "Amazon Pay, etc." },
 ];
 
@@ -26,79 +56,148 @@ export default function DonationPage() {
   const [success, setSuccess] = useState(false);
   const [failure, setFailure] = useState(false);
   const [failureReason, setFailureReason] = useState("");
-  const [donationId, setDonationId] = useState("");
   const defaultAmt = parseInt(searchParams.get("amount") || "500");
-  const [selectedAmt, setSelectedAmt] = useState(AMOUNTS.includes(defaultAmt) ? defaultAmt : 500);
-  const [customAmt, setCustomAmt] = useState(AMOUNTS.includes(defaultAmt) ? "" : String(defaultAmt));
+  const [selectedAmt, setSelectedAmt] = useState(
+    AMOUNTS.includes(defaultAmt) ? defaultAmt : 500,
+  );
+  const [customAmt, setCustomAmt] = useState(
+    AMOUNTS.includes(defaultAmt) ? "" : String(defaultAmt),
+  );
   const [payMethod, setPayMethod] = useState("upi");
   const [message, setMessage] = useState("");
   const [anonymous, setAnonymous] = useState(false);
 
   useEffect(() => {
-    needsAPI.getOne(needId!).then(r => setNeed(r.data.data))
+    needsAPI
+      .getOne(needId!)
+      .then((r) => setNeed(r.data.data))
       .catch(() => navigate("/needs"))
       .finally(() => setLoading(false));
   }, [needId]);
 
   const finalAmt = customAmt ? parseInt(customAmt) || 0 : selectedAmt;
-  
+
   const resetForm = () => {
     setFailure(false);
     setFailureReason("");
     setSuccess(false);
     setVerifying(false);
-    setDonationId("");
+  };
+
+  // ── FIX: accept donationId as a direct parameter instead of reading state ──
+  const handlePaymentSuccess = async (
+    razorpayResponse: any,
+    donationId: string,
+  ) => {
+    setVerifying(true);
+    try {
+      if (!donationId) {
+        throw new Error(
+          "Verification failed: donation id missing. Please try again.",
+        );
+      }
+
+      const razorpay_order_id =
+        razorpayResponse?.razorpay_order_id ?? razorpayResponse?.order_id;
+
+      const razorpay_payment_id =
+        razorpayResponse?.razorpay_payment_id ?? razorpayResponse?.payment_id;
+
+      const razorpay_signature =
+        razorpayResponse?.razorpay_signature ??
+        razorpayResponse?.signature ??
+        razorpayResponse?.razorpaySignature;
+
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        throw new Error(
+          "Verification failed: Razorpay response missing order/payment/signature. Please try again.",
+        );
+      }
+
+      await donationsAPI.verify({
+        razorpay_order_id,
+        razorpay_payment_id,
+        razorpay_signature,
+        donationId,
+      });
+
+      await recommendAPI
+        .trackInteraction({
+          category: need?.category,
+          charityId: need?.charity?._id,
+          action: "donate",
+        })
+        .catch(() => {});
+
+      setSuccess(true);
+      return true;
+    } catch (err: any) {
+      const errorMessage =
+        err?.response?.data?.error ||
+        err?.error?.description ||
+        err?.message ||
+        "Verification failed. Please contact support.";
+
+      setFailure(true);
+      setFailureReason(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (finalAmt < 10) return toast.error("Minimum donation is ₹10");
-    
+
     setSubmitting(true);
     setFailure(false);
     setFailureReason("");
-    
+
     try {
       // Step 1: Create pending donation & Razorpay order
       const createRes = await donationsAPI.create({
-        need: needId, 
+        need: needId,
         charity: need.charity?._id,
-        amount: finalAmt, 
-        paymentMethod: payMethod, 
-        message, 
+        amount: finalAmt,
+        paymentMethod: payMethod,
+        message,
         isAnonymous: anonymous,
       });
-      
+
       const { data } = createRes.data;
-      
-      // Validate Razorpay key is present
+      console.log(data);
+
       if (!data.key) {
-        const errorMsg = "Payment gateway not configured. Please contact support.";
+        const errorMsg =
+          "Payment gateway not configured. Please contact support.";
         setFailure(true);
         setFailureReason(errorMsg);
         toast.error(errorMsg);
         setSubmitting(false);
         return;
       }
-      
-      setDonationId(data.id as string);
-      
+
+      // ── FIX: capture the id in a local variable, don't rely on setState ──
+      const donationId = data.id as string;
+
       // Step 2: Load Razorpay
       await loadRazorpay();
-      
+
       // Step 3: Open checkout
       const razorpayResponse = await openRazorpayCheckout(data);
 
-      // Step 4: Verify payment with backend
-      setVerifying(true);
-      await handlePaymentSuccess(razorpayResponse);
-      toast.success("Payment successful and verified! Thank you.");
-      
+      // Step 4: Verify — pass donationId directly
+      setSubmitting(false);
+      const verified = await handlePaymentSuccess(razorpayResponse, donationId);
+      if (verified) {
+        toast.success("Payment successful and verified! Thank you.");
+      }
     } catch (err: any) {
       console.error("Payment error:", err);
       let errorMessage = "Payment failed. Please try again.";
-      
-      // Check for specific error messages
+
       if (err.response?.data?.error) {
         errorMessage = err.response.data.error;
       } else if (err.error?.description) {
@@ -106,164 +205,240 @@ export default function DonationPage() {
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
-      setFailure(true);
-      setFailureReason(errorMessage);
-      toast.error(errorMessage);
-    } finally { 
-      setSubmitting(false); 
-    }
-  };
 
-  // Payment success handler (called from Razorpay callback)
-  const handlePaymentSuccess = async (razorpayResponse: any) => {
-    if (!donationId) return;
-    
-    try {
-      await donationsAPI.verify({
-        razorpay_order_id: razorpayResponse.razorpay_order_id,
-        razorpay_payment_id: razorpayResponse.razorpay_payment_id,
-        razorpay_signature: razorpayResponse.razorpay_signature,
-        donationId,
-      });
-      
-      await recommendAPI.trackInteraction({ 
-        category: need?.category, 
-        charityId: need?.charity?._id, 
-        action: "donate" 
-      }).catch(() => {});
-      
-      setSuccess(true);
-      toast.success("Thank you! Your donation is confirmed.");
-    } catch (err: any) {
-      const errorMessage = err.error?.description || err.message || "Verification failed. Please contact support.";
       setFailure(true);
       setFailureReason(errorMessage);
       toast.error(errorMessage);
     } finally {
-      setVerifying(false);
+      setSubmitting(false);
     }
   };
 
+  if (loading)
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-8 h-8 border-2 border-saffron-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
 
-  if (loading) return <div className="flex items-center justify-center py-20"><div className="w-8 h-8 border-2 border-saffron-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (verifying)
+    return (
+      <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 180 }}
+        >
+          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+          </div>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <h2 className="font-display font-extrabold text-3xl text-foreground mb-2">
+            Verifying Payment
+          </h2>
+          <p className="text-muted-foreground mb-1">
+            Please wait while we confirm your
+          </p>
+          <p className="font-display font-bold text-3xl text-saffron-600 mb-2">
+            {formatCurrency(finalAmt)}
+          </p>
+          <p className="text-muted-foreground text-sm mb-1">donation to</p>
+          <p className="font-semibold text-foreground mb-6">"{need?.title}"</p>
+          <p className="text-sm text-muted-foreground">
+            This may take a few seconds...
+          </p>
+        </motion.div>
+      </div>
+    );
 
-  if (verifying) return (
-    <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
-      <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 180 }}>
-        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-        </div>
-      </motion.div>
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <h2 className="font-display font-extrabold text-3xl text-foreground mb-2">Verifying Payment</h2>
-        <p className="text-muted-foreground mb-1">Please wait while we confirm your</p>
-        <p className="font-display font-bold text-3xl text-saffron-600 mb-2">{formatCurrency(finalAmt)}</p>
-        <p className="text-muted-foreground text-sm mb-1">donation to</p>
-        <p className="font-semibold text-foreground mb-6">"{need?.title}"</p>
-        <p className="text-sm text-muted-foreground">This may take a few seconds...</p>
-      </motion.div>
-    </div>
-  );
+  if (success)
+    return (
+      <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 180 }}
+        >
+          <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle className="w-10 h-10 text-emerald-500" />
+          </div>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <h2 className="font-display font-extrabold text-3xl text-foreground mb-2">
+            Thank you! 🎉
+          </h2>
+          <p className="text-muted-foreground mb-1">Your donation of</p>
+          <p className="font-display font-bold text-3xl text-saffron-600 mb-2">
+            {formatCurrency(finalAmt)}
+          </p>
+          <p className="text-muted-foreground text-sm mb-1">to</p>
+          <p className="font-semibold text-foreground mb-6">"{need?.title}"</p>
+          <p className="text-sm text-muted-foreground mb-2">
+            A receipt has been sent to your email. You're making a real
+            difference! ❤️
+          </p>
+          <div className="flex flex-col gap-3 mt-8">
+            <Link
+              to="/dashboard"
+              className="py-3 bg-saffron-500 hover:bg-saffron-600 text-white font-bold rounded-xl transition-colors shadow-btn-primary"
+            >
+              Go to Dashboard
+            </Link>
+            <Link
+              to="/needs"
+              className="py-3 border border-border text-foreground font-semibold rounded-xl hover:bg-secondary transition-colors"
+            >
+              Explore More Causes
+            </Link>
+          </div>
+        </motion.div>
+      </div>
+    );
 
-  if (success) return (
-    <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
-      <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 180 }}>
-        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="w-10 h-10 text-emerald-500" />
-        </div>
-      </motion.div>
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <h2 className="font-display font-extrabold text-3xl text-foreground mb-2">Thank you! 🎉</h2>
-        <p className="text-muted-foreground mb-1">Your donation of</p>
-        <p className="font-display font-bold text-3xl text-saffron-600 mb-2">{formatCurrency(finalAmt)}</p>
-        <p className="text-muted-foreground text-sm mb-1">to</p>
-        <p className="font-semibold text-foreground mb-6">"{need?.title}"</p>
-        <p className="text-sm text-muted-foreground mb-2">A receipt has been sent to your email. You're making a real difference! ❤️</p>
-        <div className="flex flex-col gap-3 mt-8">
-          <Link to="/dashboard" className="py-3 bg-saffron-500 hover:bg-saffron-600 text-white font-bold rounded-xl transition-colors shadow-btn-primary">Go to Dashboard</Link>
-          <Link to="/needs" className="py-3 border border-border text-foreground font-semibold rounded-xl hover:bg-secondary transition-colors">Explore More Causes</Link>
-        </div>
-      </motion.div>
-    </div>
-  );
-
-  if (failure) return (
-    <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
-      <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 180 }}>
-        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <XCircle className="w-10 h-10 text-red-500" />
-        </div>
-      </motion.div>
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <h2 className="font-display font-extrabold text-3xl text-foreground mb-2">Payment Failed</h2>
-        <p className="text-muted-foreground mb-1">Your donation of</p>
-        <p className="font-display font-bold text-3xl text-red-600 mb-2">{formatCurrency(finalAmt)}</p>
-        <p className="text-muted-foreground text-sm mb-1">to</p>
-        <p className="font-semibold text-foreground mb-6">"{need?.title}"</p>
-        <p className="text-sm text-muted-foreground mb-2">Reason: {failureReason}</p>
-        <p className="text-sm text-muted-foreground mb-6">Don't worry, no charges were made to your account.</p>
-        <div className="flex flex-col gap-3 mt-8">
-          <button 
-            onClick={resetForm}
-            className="py-3 bg-saffron-500 hover:bg-saffron-600 text-white font-bold rounded-xl transition-colors shadow-btn-primary flex items-center justify-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Try Again
-          </button>
-          <Link to="/needs" className="py-3 border border-border text-foreground font-semibold rounded-xl hover:bg-secondary transition-colors">Explore Other Causes</Link>
-        </div>
-      </motion.div>
-    </div>
-  );
+  if (failure)
+    return (
+      <div className="container mx-auto px-4 py-16 max-w-md text-center page-in">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 180 }}
+        >
+          <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <XCircle className="w-10 h-10 text-red-500" />
+          </div>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <h2 className="font-display font-extrabold text-3xl text-foreground mb-2">
+            Payment Failed
+          </h2>
+          <p className="text-muted-foreground mb-1">Your donation of</p>
+          <p className="font-display font-bold text-3xl text-red-600 mb-2">
+            {formatCurrency(finalAmt)}
+          </p>
+          <p className="text-muted-foreground text-sm mb-1">to</p>
+          <p className="font-semibold text-foreground mb-6">"{need?.title}"</p>
+          <p className="text-sm text-muted-foreground mb-2">
+            Reason: {failureReason}
+          </p>
+          <p className="text-sm text-muted-foreground mb-6">
+            Don't worry, no charges were made to your account.
+          </p>
+          <div className="flex flex-col gap-3 mt-8">
+            <button
+              onClick={resetForm}
+              className="py-3 bg-saffron-500 hover:bg-saffron-600 text-white font-bold rounded-xl transition-colors shadow-btn-primary flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Try Again
+            </button>
+            <Link
+              to="/needs"
+              className="py-3 border border-border text-foreground font-semibold rounded-xl hover:bg-secondary transition-colors"
+            >
+              Explore Other Causes
+            </Link>
+          </div>
+        </motion.div>
+      </div>
+    );
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl page-in">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 group transition-colors">
-        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" /> Back
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 group transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />{" "}
+        Back
       </button>
 
       <div className="grid sm:grid-cols-5 gap-6">
         {/* Form */}
         <form onSubmit={handleSubmit} className="sm:col-span-3 space-y-5">
           <div>
-            <h1 className="font-display font-bold text-2xl text-foreground">Make a Donation</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">100% goes directly to the cause</p>
+            <h1 className="font-display font-bold text-2xl text-foreground">
+              Make a Donation
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              100% goes directly to the cause
+            </p>
           </div>
 
           {/* Amount */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">Choose amount</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Choose amount
+            </label>
             <div className="grid grid-cols-3 gap-2 mb-3">
-              {AMOUNTS.map(a => (
-                <button key={a} type="button"
-                  onClick={() => { setSelectedAmt(a); setCustomAmt(""); }}
-                  className={`py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${selectedAmt === a && !customAmt ? "bg-saffron-500 text-white border-saffron-500 shadow-btn-primary" : "bg-card border-border hover:border-saffron-300 text-foreground"}`}>
+              {AMOUNTS.map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => {
+                    setSelectedAmt(a);
+                    setCustomAmt("");
+                  }}
+                  className={`py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${selectedAmt === a && !customAmt ? "bg-saffron-500 text-white border-saffron-500 shadow-btn-primary" : "bg-card border-border hover:border-saffron-300 text-foreground"}`}
+                >
                   {formatCurrency(a)}
                 </button>
               ))}
             </div>
-            <input type="number" min="10" placeholder="Enter a custom amount (₹)"
-              value={customAmt} onChange={e => { setCustomAmt(e.target.value); setSelectedAmt(0); }}
+            <input
+              type="number"
+              min="10"
+              placeholder="Enter a custom amount (₹)"
+              value={customAmt}
+              onChange={(e) => {
+                setCustomAmt(e.target.value);
+                setSelectedAmt(0);
+              }}
               className="w-full px-4 py-3 bg-card border border-border rounded-xl text-sm focus:ring-2 focus:ring-saffron-400/50 focus:border-saffron-400 transition-all"
             />
           </div>
 
           {/* Payment method */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-2">Payment method</label>
+            <label className="block text-sm font-semibold text-foreground mb-2">
+              Payment method
+            </label>
             <div className="space-y-2">
               {PAYMENT_METHODS.map(({ value, label, icon: Icon, desc }) => (
-                <button key={value} type="button" onClick={() => setPayMethod(value)}
-                  className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left ${payMethod === value ? "bg-saffron-50 border-saffron-400" : "bg-card border-border hover:border-saffron-200"}`}>
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${payMethod === value ? "bg-saffron-100" : "bg-secondary"}`}>
-                    <Icon className={`w-4.5 h-4.5 ${payMethod === value ? "text-saffron-600" : "text-muted-foreground"}`} />
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setPayMethod(value)}
+                  className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all text-left ${payMethod === value ? "bg-saffron-50 border-saffron-400" : "bg-card border-border hover:border-saffron-200"}`}
+                >
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${payMethod === value ? "bg-saffron-100" : "bg-secondary"}`}
+                  >
+                    <Icon
+                      className={`w-4.5 h-4.5 ${payMethod === value ? "text-saffron-600" : "text-muted-foreground"}`}
+                    />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">{label}</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {label}
+                    </p>
                     <p className="text-xs text-muted-foreground">{desc}</p>
                   </div>
-                  {payMethod === value && <CheckCircle className="w-4 h-4 text-saffron-500 ml-auto shrink-0" />}
+                  {payMethod === value && (
+                    <CheckCircle className="w-4 h-4 text-saffron-500 ml-auto shrink-0" />
+                  )}
                 </button>
               ))}
             </div>
@@ -271,44 +446,82 @@ export default function DonationPage() {
 
           {/* Message */}
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1.5">Leave a message <span className="font-normal text-muted-foreground">(optional)</span></label>
-            <textarea rows={2} placeholder="Encouraging note to the charity…"
-              value={message} onChange={e => setMessage(e.target.value)}
+            <label className="block text-sm font-semibold text-foreground mb-1.5">
+              Leave a message{" "}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </label>
+            <textarea
+              rows={2}
+              placeholder="Encouraging note to the charity…"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
               className="w-full px-4 py-3 bg-card border border-border rounded-xl text-sm focus:ring-2 focus:ring-saffron-400/50 focus:border-saffron-400 transition-all resize-none"
             />
           </div>
 
           {/* Anonymous */}
           <label className="flex items-center gap-2.5 cursor-pointer group">
-            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${anonymous ? "bg-saffron-500 border-saffron-500" : "border-border group-hover:border-saffron-300"}`}
-              onClick={() => setAnonymous(v => !v)}>
+            <div
+              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${anonymous ? "bg-saffron-500 border-saffron-500" : "border-border group-hover:border-saffron-300"}`}
+              onClick={() => setAnonymous((v) => !v)}
+            >
               {anonymous && <CheckCircle className="w-3 h-3 text-white" />}
             </div>
-            <span className="text-sm text-muted-foreground">Donate anonymously</span>
+            <span className="text-sm text-muted-foreground">
+              Donate anonymously
+            </span>
           </label>
 
-          <button type="submit" disabled={submitting || verifying || finalAmt < 10}
-            className="w-full py-4 bg-saffron-500 hover:bg-saffron-600 disabled:opacity-60 text-white font-bold rounded-xl text-base transition-all shadow-btn-primary hover:shadow-none flex items-center justify-center gap-2">
-            {verifying ? <><Loader2 className="w-5 h-5 animate-spin" /> Verifying Payment…</> : submitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing…</> : `Donate ${formatCurrency(finalAmt)}`}
+          <button
+            type="submit"
+            disabled={submitting || verifying || finalAmt < 10}
+            className="w-full py-4 bg-saffron-500 hover:bg-saffron-600 disabled:opacity-60 text-white font-bold rounded-xl text-base transition-all shadow-btn-primary hover:shadow-none flex items-center justify-center gap-2"
+          >
+            {verifying ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" /> Verifying
+                Payment…
+              </>
+            ) : submitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" /> Processing…
+              </>
+            ) : (
+              `Donate ${formatCurrency(finalAmt)}`
+            )}
           </button>
-          <p className="text-xs text-center text-muted-foreground">🔒 Secure payment · Receipt sent to email · 80G eligible</p>
+          <p className="text-xs text-center text-muted-foreground">
+            🔒 Secure payment · Receipt sent to email · 80G eligible
+          </p>
         </form>
 
         {/* Summary */}
         <div className="sm:col-span-2">
           <div className="bg-card border border-border rounded-2xl p-5 sticky top-24 shadow-card">
-            <h3 className="font-semibold text-sm text-foreground mb-4">Donation Summary</h3>
+            <h3 className="font-semibold text-sm text-foreground mb-4">
+              Donation Summary
+            </h3>
             <div className="flex items-start gap-2.5 mb-4 pb-4 border-b border-border">
-              <span className="text-2xl">{getCategoryIcon(need?.category)}</span>
+              <span className="text-2xl">
+                {getCategoryIcon(need?.category)}
+              </span>
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">{need?.charity?.name}</p>
-                <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{need?.title}</p>
+                <p className="text-xs text-muted-foreground">
+                  {need?.charity?.name}
+                </p>
+                <p className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+                  {need?.title}
+                </p>
               </div>
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Your donation</span>
-                <span className="font-semibold">{formatCurrency(finalAmt || 0)}</span>
+                <span className="font-semibold">
+                  {formatCurrency(finalAmt || 0)}
+                </span>
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Platform fee</span>
@@ -316,7 +529,9 @@ export default function DonationPage() {
               </div>
               <div className="flex justify-between font-bold text-foreground pt-2 border-t border-border">
                 <span>Total</span>
-                <span className="text-saffron-600">{formatCurrency(finalAmt || 0)}</span>
+                <span className="text-saffron-600">
+                  {formatCurrency(finalAmt || 0)}
+                </span>
               </div>
             </div>
           </div>
